@@ -72,8 +72,29 @@ local function setupNet()
   return net
 end
 
+local function setupDeepNet()
+  local net = nn.Sequential()
+  net:add(nn.SpatialConvolution(3, 16, 5, 5, 1, 1, 2, 2))
+  net:add(nn.ReLU())
+  net:add(nn.SpatialMaxPooling(2,2,2,2))
+
+  net:add(nn.SpatialConvolution(16, 20, 5, 5, 1, 1, 2, 2))
+  net:add(nn.ReLU())
+  net:add(nn.SpatialMaxPooling(2,2,2,2))
+
+  net:add(nn.SpatialConvolution(20, 20, 5, 5, 1, 1, 2, 2))
+  net:add(nn.ReLU())
+  net:add(nn.SpatialMaxPooling(2,2,2,2))
+
+  net:add(nn.View(20*4*4))                    -- reshapes from a 3D tensor of 16x5x5 into 1D tensor of 16*5*5
+  net:add(nn.Linear(20*4*4, 80))             -- fully connected layer (matrix multiplication between input and weights)
+  net:add(nn.Linear(80, 10))                 -- 10 is the number of outputs of the network (in this case, 10 digits)
+  net:add(nn.LogSoftMax())                    -- converts the output to a log-probability. Useful for classification problems
+  return net
+end
+
 local function train(trainset, params)
-  local net = setupNet()
+  local net = setupDeepNet()
   local criterion = nn.ClassNLLCriterion()
 
   if params.gpu >= 0 then

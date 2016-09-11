@@ -1,10 +1,12 @@
 require 'image'
 require 'nn'
 require 'paths'
-require 'clnn'
-require 'cltorch'
 
-function setupData()
+local cmd = torch.CmdLine()
+cmd:option('-gpu', 0, 'Zero-indexed ID of the GPU to use; Use -1 for CPU mode.')
+cmd:option('-backend', 'nn', 'nn for CPU, cunn for CUDA, clnn for OpenCL.')
+
+local function setupData()
   if (not paths.filep("cifar10torchsmall.zip")) then
     print("Getting the small CIFAR-10 dataset.")
     os.execute('wget -c https://s3.amazonaws.com/torch7/data/cifar10torchsmall.zip')
@@ -29,7 +31,7 @@ function setupData()
   return trainset, testset
 end
 
-function normalizeTrainSet(trainset)
+local function normalizeTrainSet(trainset)
   local mean = {}
   local stddev = {}
 
@@ -43,7 +45,7 @@ function normalizeTrainSet(trainset)
   return trainset, mean, stddev
 end
 
-function normalizeTestSet(testset, mean, stddev)
+local function normalizeTestSet(testset, mean, stddev)
   for i=1,3 do -- over each image channel
       testset.data[{ {}, {i}, {}, {}  }]:add(-mean[i]) -- mean subtraction
       testset.data[{ {}, {i}, {}, {}  }]:div(stddev[i]) -- std scaling
@@ -51,7 +53,7 @@ function normalizeTestSet(testset, mean, stddev)
   return testset
 end
 
-function setupNet()
+local function setupNet()
   local net = nn.Sequential()
   net:add(nn.SpatialConvolution(3, 6, 5, 5)) -- 3 input image channels, 6 output channels, 5x5 convolution kernel
   net:add(nn.ReLU())                       -- non-linearity
@@ -70,22 +72,59 @@ function setupNet()
   return net
 end
 
-function train(trainset)
+local function train(trainset, params)
   local net = setupNet()
   local criterion = nn.ClassNLLCriterion()
   local trainer = nn.StochasticGradient(net, criterion)
   trainer.learningRate = 0.001
-  trainer.maxIteration = 1 -- just do 5 epochs of training.
+  trainer.maxIteration = 5
+
+  if params.gpu >= 0 then
+    if params.backend ~= 'clnn' then
+      -- CUDA backend, move everything to CUDA.
+      trainset.data = trainset.data:cuda()
+      trainset.label = testset.label:cuda()
+      testset.data = testset.data:cuda()
+      testset.label = testset.label:cuda()
+      net = net:cuda()
+      criterion = criterion:cuda()
+      print('Moving the training to the CUDA backend.')
+    else
+      -- OpenCL backend, move everything to OpenCL.
+      trainset.data = trainset.data:cl()
+      trainset.label = testset.label:cl()
+      testset.data = testset.data:cl()
+      testset.label = testset.label:cl()
+      net = net:cl()
+      criterion = criterion:cl()
+      print('Moving the training to the OpenCL backend.')
+    end
+  end
+
   trainer:train(trainset)
   return net
 end
 
-function main()
+local function main(params)
+  local usingOpenCl = false
+  if params.gpu >= 0 then
+    if params.backend ~= 'clnn' then
+      require 'cunn'
+      require 'cutorch'
+      cutorch.setDevice(params.gpu + 1)
+    else
+      require 'clnn'
+      require 'cltorch'
+      cltorch.setDevice(params.gpu + 1)
+      usingOpenCl = true
+    end
+  end
+
   print('Preparing the train & test data.')
   trainset, testset = setupData()
   trainset, mean, stddev = normalizeTrainSet(trainset)
   print('Starting the training.')
-  net = train(trainset)
+  net = train(trainset, params)
 
   print('Starting the test Evaluation.')
   testset = normalizeTestSet(testset, mean, stddev)
@@ -93,6 +132,13 @@ function main()
   for i=1,10000 do
     local groundtruth = testset.label[i]
     local prediction = net:forward(testset.data[i])
+
+    if usingOpenCl then
+      -- OpenCL doesnt support torch.sort on torch.CLTensor, yet.
+      -- Moving the predictions to CPU shouldn't be a big problem.
+      prediction = prediction:float()
+    end
+
     local confidences, indices = torch.sort(prediction, true)  -- true means sort in descending order
     if groundtruth == indices[1] then
         correct = correct + 1
@@ -101,4 +147,7 @@ function main()
   print('Test Accuracy:', 100*correct/10000 .. '%')
 end
 
-main()
+local params = cmd:parse(arg)
+main(params)
+print('Collecting garbage before exiting.')
+collectgarbage()

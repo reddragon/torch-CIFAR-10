@@ -1,4 +1,3 @@
-require 'image'
 require 'nn'
 require 'paths'
 

@@ -65,10 +65,9 @@ local function setupNet()
   net:add(nn.View(16*5*5))                    -- reshapes from a 3D tensor of 16x5x5 into 1D tensor of 16*5*5
   net:add(nn.Linear(16*5*5, 120))             -- fully connected layer (matrix multiplication between input and weights)
   net:add(nn.ReLU())                       -- non-linearity
-  net:add(nn.Linear(120, 10))
-  -- net:add(nn.Linear(120, 84))
-  -- net:add(nn.ReLU())                       -- non-linearity
-  -- net:add(nn.Linear(84, 10))                   -- 10 is the number of outputs of the network (in this case, 10 digits)
+  net:add(nn.Linear(120, 84))
+  net:add(nn.ReLU())                       -- non-linearity
+  net:add(nn.Linear(84, 10))                   -- 10 is the number of outputs of the network (in this case, 10 digits)
   net:add(nn.LogSoftMax())                     -- converts the output to a log-probability. Useful for classification problems
   return net
 end

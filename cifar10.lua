@@ -4,6 +4,8 @@ require 'paths'
 local cmd = torch.CmdLine()
 cmd:option('-gpu', -1, 'Zero-indexed ID of the GPU to use; Use -1 for CPU mode.')
 cmd:option('-backend', 'nn', 'nn for CPU, cunn for CUDA, clnn for OpenCL.')
+cmd:option('-iters', 5, 'Number of iterations.')
+cmd:option('-lr', 0.001, 'Learning Rate.')
 
 local function setupData()
   if (not paths.filep("cifar10torchsmall.zip")) then
@@ -97,9 +99,11 @@ local function train(trainset, params)
     end
   end
 
+  print('Beginning the training with ' .. params.iters .. ' iterations, ' ..
+    'with learning rate = ' .. params.lr)
   local trainer = nn.StochasticGradient(net, criterion)
-  trainer.learningRate = 0.001
-  trainer.maxIteration = 5
+  trainer.learningRate = params.lr
+  trainer.maxIteration = params.iters
   trainer:train(trainset)
   return net
 end
@@ -122,7 +126,7 @@ local function main(params)
   print('Preparing the train & test data.')
   trainset, testset = setupData()
   trainset, mean, stddev = normalizeTrainSet(trainset)
-  print('Starting the training.')
+  print('Starting the training process')
   net = train(trainset, params)
 
   print('Starting the test Evaluation.')

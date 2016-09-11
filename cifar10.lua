@@ -3,7 +3,7 @@ require 'nn'
 require 'paths'
 
 local cmd = torch.CmdLine()
-cmd:option('-gpu', 0, 'Zero-indexed ID of the GPU to use; Use -1 for CPU mode.')
+cmd:option('-gpu', -1, 'Zero-indexed ID of the GPU to use; Use -1 for CPU mode.')
 cmd:option('-backend', 'nn', 'nn for CPU, cunn for CUDA, clnn for OpenCL.')
 
 local function setupData()
@@ -75,15 +75,12 @@ end
 local function train(trainset, params)
   local net = setupNet()
   local criterion = nn.ClassNLLCriterion()
-  local trainer = nn.StochasticGradient(net, criterion)
-  trainer.learningRate = 0.001
-  trainer.maxIteration = 5
 
   if params.gpu >= 0 then
     if params.backend ~= 'clnn' then
       -- CUDA backend, move everything to CUDA.
       trainset.data = trainset.data:cuda()
-      trainset.label = testset.label:cuda()
+      trainset.label = trainset.label:cuda()
       testset.data = testset.data:cuda()
       testset.label = testset.label:cuda()
       net = net:cuda()
@@ -92,7 +89,7 @@ local function train(trainset, params)
     else
       -- OpenCL backend, move everything to OpenCL.
       trainset.data = trainset.data:cl()
-      trainset.label = testset.label:cl()
+      trainset.label = trainset.label:cl()
       testset.data = testset.data:cl()
       testset.label = testset.label:cl()
       net = net:cl()
@@ -101,6 +98,9 @@ local function train(trainset, params)
     end
   end
 
+  local trainer = nn.StochasticGradient(net, criterion)
+  trainer.learningRate = 0.001
+  trainer.maxIteration = 5
   trainer:train(trainset)
   return net
 end

@@ -1,10 +1,11 @@
 require 'nn'
 require 'paths'
+require 'optim'
 
 local cmd = torch.CmdLine()
 cmd:option('-gpu', -1, 'Zero-indexed ID of the GPU to use; Use -1 for CPU mode.')
 cmd:option('-backend', 'nn', 'nn for CPU, cunn for CUDA, clnn for OpenCL.')
-cmd:option('-iters', 5, 'Number of iterations.')
+cmd:option('-iters', 10, 'Number of iterations.')
 cmd:option('-lr', 0.001, 'Learning Rate.')
 
 local function setupData()
@@ -119,12 +120,45 @@ local function train(trainset, params)
     end
   end
 
+  optimState = {
+    learningRate = params.lr,
+    momentum = 0.5
+  }
   print('Beginning the training with ' .. params.iters .. ' iterations, ' ..
     'with learning rate = ' .. params.lr)
+  --[[
   local trainer = nn.StochasticGradient(net, criterion)
   trainer.learningRate = params.lr
   trainer.maxIteration = params.iters
   trainer:train(trainset)
+  --]]
+  nparams, gradParams = net:getParameters()
+  batch_size = 512
+  samples = trainset.data:size()[1]
+  num_batches = math.floor(samples / batch_size)
+  print('Size of the data: ', samples, ' with batches: ', num_batches)
+  for epoch = 1,params.iters do
+    batch_number = (epoch - 1) % num_batches
+    print('Doing epoch ', epoch, ', with batch_number: ', batch_number)
+    start_index = batch_number * batch_size + 1
+    end_index = start_index + batch_size
+    print('start_index ', start_index, ' end_index', end_index)
+    function feval(nparams)
+      gradParams:zero()
+
+      local outputs = net:forward(trainset.data[{{start_index, end_index}}])
+      --local outputs = net:forward(trainset.data)
+      local loss = criterion:forward(outputs, trainset.label[{{start_index, end_index}}])
+      --local loss = criterion:forward(outputs, trainset.label)
+      -- local dloss_doutputs = criterion:backward(outputs, trainset.label)
+      local dloss_doutputs = criterion:backward(outputs, trainset.label[{{start_index, end_index}}])
+      -- net:backward(trainset.data, dloss_doutputs)
+      net:backward(trainset.data[{{start_index, end_index}}], dloss_doutputs)
+
+      return loss, gradParams
+    end
+    optim.lbfgs(feval, nparams, optimState)
+  end
   return net
 end
 

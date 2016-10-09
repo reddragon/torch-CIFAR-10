@@ -133,7 +133,7 @@ local function train(trainset, params)
   trainer:train(trainset)
   --]]
   nparams, gradParams = net:getParameters()
-  batch_size = 512
+  batch_size = 128
   samples = trainset.data:size()[1]
   num_batches = math.floor(samples / batch_size)
   print('Size of the data: ', samples, ' with batches: ', num_batches)
@@ -155,6 +155,8 @@ local function train(trainset, params)
       -- net:backward(trainset.data, dloss_doutputs)
       net:backward(trainset.data[{{start_index, end_index}}], dloss_doutputs)
 
+      print('Current loss is: ', loss)
+      collectgarbage()
       return loss, gradParams
     end
     optim.lbfgs(feval, nparams, optimState)
@@ -183,25 +185,34 @@ local function main(params)
   print('Starting the training process')
   net = train(trainset, params)
 
-  print('Starting the test Evaluation.')
+  print('Doing the normalization.')
   testset = normalizeTestSet(testset, mean, stddev)
+  testset_size = testset.data:size()[1]
+  -- testset_size = 100
+  print('Starting the test Evaluation.')
+
   correct = 0
-  for i=1,10000 do
-    local groundtruth = testset.label[i]
-    local prediction = net:forward(testset.data[i])
-
-    if usingOpenCl then
-      -- OpenCL doesnt support torch.sort on torch.CLTensor, yet.
-      -- Moving the predictions to CPU shouldn't be a big problem.
-      prediction = prediction:float()
-    end
-
-    local confidences, indices = torch.sort(prediction, true)  -- true means sort in descending order
-    if groundtruth == indices[1] then
-        correct = correct + 1
-    end
+  predictionV = net:forward(testset.data)
+  if usingOpenCl then
+    -- OpenCL doesnt support torch.sort on torch.CLTensor, yet.
+    -- Moving the predictions to CPU shouldn't be a big problem.
+    predictionV = predictionV:float()
   end
-  print('Test Accuracy:', 100*correct/10000 .. '%')
+  print('Size: ', predictionV:size())
+  c, idx = torch.sort(predictionV, true)
+  print('Finished the sorting')
+  print('C: ', c:size())
+  print('idx: ', idx: size())
+  print('label: ', testset.label:size())
+  print('ltype: ', testset.label:type())
+  correctV = idx:sub(1,-1,1,1)
+  print('correct', correctV:size())
+  print('ctype: ', correctV:type())
+  totalCorrect = correctV:eq(testset.label:long()):sum()
+  print('Total Correct: ', totalCorrect)
+  print('Assumed Accuracy: ', totalCorrect * 100.0 / testset_size)
+
+  print('Finished initial try')
 end
 
 local params = cmd:parse(arg)
